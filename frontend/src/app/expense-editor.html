@@ -1,0 +1,97 @@
+<a mat-button [routerLink]="['/groups', groupId]">← 返回群組</a>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">SHARED EXPENSE</p>
+    <h1>{{ expenseId ? '編輯支出' : '記下一筆共同花費' }}</h1>
+  </div>
+</div>
+@if (error()) {
+  <p class="error" role="alert">{{ error() }}</p>
+}
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" class="editor-grid">
+    <mat-card
+      ><mat-card-content
+        ><h2>支出資訊</h2>
+        <mat-form-field
+          ><mat-label>支出標題</mat-label
+          ><input matInput formControlName="title" maxlength="100" placeholder="例如：週末聚餐"
+        /></mat-form-field>
+        <div class="form-row">
+          <mat-form-field
+            ><mat-label>總金額（TWD）</mat-label
+            ><input
+              matInput
+              inputmode="decimal"
+              formControlName="amount"
+              placeholder="0.00" /></mat-form-field
+          ><mat-form-field
+            ><mat-label>支出日期</mat-label><input matInput type="date" formControlName="date"
+          /></mat-form-field>
+        </div>
+        <mat-form-field
+          ><mat-label>誰先付款？</mat-label
+          ><mat-select formControlName="payerId">
+            @for (m of members(); track m.id) {
+              <mat-option [value]="m.id">{{ m.name }}</mat-option>
+            }
+          </mat-select></mat-form-field
+        ><mat-form-field
+          ><mat-label>備註（選填）</mat-label
+          ><textarea
+            matInput
+            formControlName="note"
+            maxlength="1000"
+          ></textarea></mat-form-field></mat-card-content></mat-card
+    ><mat-card
+      ><mat-card-content
+        ><h2>如何分攤？</h2>
+        <mat-form-field
+          ><mat-label>分攤方式</mat-label
+          ><mat-select formControlName="splitMode"
+            ><mat-option value="Equal">平均分攤</mat-option
+            ><mat-option value="Custom">自訂金額</mat-option></mat-select
+          ></mat-form-field
+        >
+        @for (m of members(); track m.id) {
+          <div class="split-row">
+            <mat-checkbox
+              [checked]="selected().includes(m.id)"
+              (change)="toggle(m.id, $event.checked)"
+              >{{ m.name }}</mat-checkbox
+            >
+            @if (selected().includes(m.id)) {
+              @if (form.controls.splitMode.value === 'Custom') {
+                <mat-form-field class="compact"
+                  ><mat-label>{{ m.name }} 的金額</mat-label
+                  ><input
+                    matInput
+                    inputmode="decimal"
+                    [value]="custom()[m.id] || ''"
+                    (input)="changeCustom(m.id, $event)"
+                /></mat-form-field>
+              } @else {
+                <strong>{{ money(previewAmount(m.id)) }}</strong>
+              }
+            }
+          </div>
+        }
+        @if (form.controls.splitMode.value === 'Custom') {
+          <p [class.error]="remaining() !== 0">
+            {{ remaining() < 0 ? '超額分配' : '尚未分配' }}：{{ money(remaining()) }}
+          </p>
+        }
+        <p class="small muted">無法整除的餘數，依成員識別碼排序每人補 0.01 元。</p>
+        <button
+          mat-flat-button
+          type="submit"
+          [disabled]="form.invalid || saving() || !selected().length"
+        >
+          {{ saving() ? '儲存中…' : '儲存支出' }}
+        </button></mat-card-content
+      ></mat-card
+    >
+  </form>
+}

@@ -1,0 +1,288 @@
+<a mat-button routerLink="/groups">← 我的群組</a>
+@if (error()) {
+  <p class="error" role="alert">
+    {{ error() }} <button mat-button (click)="load()">重新載入</button>
+  </p>
+}
+@if (notice()) {
+  <p class="notice" role="status">{{ notice() }}</p>
+}
+@if (loading() || busy()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+@if (group(); as g) {
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">BETTER TOGETHER</p>
+      <h1>{{ g.name }}</h1>
+      <p class="muted">{{ g.description || '一起記錄每一筆共同花費' }}</p>
+    </div>
+    <a mat-flat-button [routerLink]="['/groups', id, 'expenses', 'new']">＋ 新增支出</a>
+  </div>
+  <div class="summary-grid">
+    <div class="stat">
+      <span>群組總支出</span><strong>{{ money(snapshot().totalMinor) }}</strong
+      ><small>TWD · 不含還款</small>
+    </div>
+    <div class="stat">
+      <span>{{ mine() > 0 ? '你目前應收' : mine() < 0 ? '你目前應付' : '你的帳務已結清' }}</span
+      ><strong [class.positive]="mine() > 0">{{ money(Math.abs(mine())) }}</strong
+      ><small>已計入人工還款紀錄</small>
+    </div>
+    <div class="stat">
+      <span>一起參與</span><strong>{{ members().length }} <small>位成員</small></strong
+      ><small>每一筆分攤都有明細</small>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="群組功能">
+    <button mat-button [class.active]="tab() === 'expenses'" (click)="tab.set('expenses')">
+      支出紀錄</button
+    ><button mat-button [class.active]="tab() === 'balances'" (click)="tab.set('balances')">
+      分帳與還款</button
+    ><button mat-button [class.active]="tab() === 'members'" (click)="tab.set('members')">
+      成員與設定
+    </button>
+  </nav>
+  @if (tab() === 'expenses') {
+    <form [formGroup]="filter" (ngSubmit)="filterExpenses()" class="filters">
+      <mat-form-field
+        ><mat-label>搜尋支出</mat-label
+        ><input matInput formControlName="search" maxlength="100" /></mat-form-field
+      ><mat-form-field
+        ><mat-label>開始日期</mat-label
+        ><input matInput type="date" formControlName="from" /></mat-form-field
+      ><mat-form-field
+        ><mat-label>結束日期</mat-label
+        ><input matInput type="date" formControlName="to" /></mat-form-field
+      ><mat-form-field
+        ><mat-label>付款人</mat-label
+        ><mat-select formControlName="payerId"
+          ><mat-option value="">全部成員</mat-option>
+          @for (m of members(); track m.id) {
+            <mat-option [value]="m.id">{{ m.name }}</mat-option>
+          }
+        </mat-select></mat-form-field
+      ><button mat-flat-button [disabled]="busy()">搜尋</button>
+    </form>
+    <div class="panel">
+      @for (e of expenses().items; track e.id) {
+        <a class="expense-row" [routerLink]="['/groups', id, 'expenses', e.id]"
+          ><span class="expense-icon">↗</span>
+          <div class="grow">
+            <strong>{{ e.title }}</strong>
+            <p class="small muted">
+              {{ e.date }} · {{ name(e.payerId) }} 代墊 · {{ creator(e.createdBy) }} 建立
+            </p>
+          </div>
+          <strong>{{ money(e.amountMinor) }}</strong
+          ><span aria-hidden="true">›</span></a
+        >
+      } @empty {
+        <div class="empty">
+          <h2>還沒有符合條件的支出</h2>
+          <p>新增第一筆支出，開始一起分帳。</p>
+        </div>
+      }
+    </div>
+    <div class="pagination">
+      <button mat-button [disabled]="page <= 1 || busy()" (click)="filterExpenses(page - 1)">
+        上一頁</button
+      ><span>第 {{ page }} 頁 · 共 {{ expenses().total }} 筆</span
+      ><button
+        mat-button
+        [disabled]="page * 20 >= expenses().total || busy()"
+        (click)="filterExpenses(page + 1)"
+      >
+        下一頁
+      </button>
+    </div>
+  }
+  @if (tab() === 'balances') {
+    <div class="section-heading">
+      <h2>成員餘額</h2>
+      <button mat-flat-button (click)="openPayment()">登記還款</button>
+    </div>
+    <div class="table-wrap panel">
+      <table>
+        <thead>
+          <tr>
+            <th>成員</th>
+            <th>已代墊</th>
+            <th>應負擔</th>
+            <th>已付還款</th>
+            <th>已收還款</th>
+            <th>目前餘額</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (b of snapshot().members; track b.memberId) {
+            <tr>
+              <td>{{ b.name }}</td>
+              <td>{{ money(b.paidMinor) }}</td>
+              <td>{{ money(b.shareMinor) }}</td>
+              <td>{{ money(b.sentMinor) }}</td>
+              <td>{{ money(b.receivedMinor) }}</td>
+              <td>
+                <strong
+                  >{{ b.netMinor > 0 ? '應收' : b.netMinor < 0 ? '應付' : '已結清' }}
+                  {{ money(Math.abs(b.netMinor)) }}</strong
+                >
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <h2>建議這樣結算</h2>
+    <p class="muted small">依群組淨額計算，可能付給未直接替你代墊的成員。建議不代表已完成付款。</p>
+    <div class="panel">
+      @for (s of snapshot().suggestions; track s.fromId + s.toId) {
+        <div class="list-row">
+          <span
+            ><strong>{{ name(s.fromId) }}</strong> → {{ name(s.toId) }}</span
+          ><strong>{{ money(s.amountMinor) }}</strong>
+          @if (canPay(s)) {
+            <button mat-button (click)="openPayment(s)">登記還款</button>
+          }
+        </div>
+      } @empty {
+        <div class="empty">目前全部結清，沒有待還款項。</div>
+      }
+    </div>
+    @if (showPayment()) {
+      <mat-card class="payment-card"
+        ><mat-card-content
+          ><h2>人工登記還款</h2>
+          <p class="muted">這是帳務紀錄，不會實際轉帳，也不表示對方已確認收款。</p>
+          <form [formGroup]="payment" (ngSubmit)="pay()">
+            <div class="form-row">
+              <mat-form-field
+                ><mat-label>付款人</mat-label
+                ><mat-select formControlName="fromId">
+                  @for (m of members(); track m.id) {
+                    <mat-option [value]="m.id">{{ m.name }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              ><mat-form-field
+                ><mat-label>收款人</mat-label
+                ><mat-select formControlName="toId">
+                  @for (m of members(); track m.id) {
+                    <mat-option [value]="m.id">{{ m.name }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              >
+            </div>
+            <div class="form-row">
+              <mat-form-field
+                ><mat-label>還款金額</mat-label
+                ><input matInput inputmode="decimal" formControlName="amount" /></mat-form-field
+              ><mat-form-field
+                ><mat-label>還款日期</mat-label><input matInput type="date" formControlName="date"
+              /></mat-form-field>
+            </div>
+            <mat-form-field
+              ><mat-label>備註</mat-label><input matInput formControlName="note" maxlength="1000"
+            /></mat-form-field>
+            <div class="actions">
+              <button mat-flat-button [disabled]="payment.invalid || busy()">確認登記</button
+              ><button mat-button type="button" (click)="showPayment.set(false)">取消</button>
+            </div>
+          </form></mat-card-content
+        ></mat-card
+      >
+    }
+    <h2>還款歷史</h2>
+    <div class="panel">
+      @for (s of settlements(); track s.id) {
+        <div class="list-row">
+          <div class="grow">
+            <strong>{{ name(s.fromId) }} → {{ name(s.toId) }}</strong>
+            <p class="small muted">
+              {{ s.date }} · {{ creator(s.createdBy) }} 人工登記 · {{ s.note }}
+            </p>
+            @if (s.voidedAt) {
+              <span class="badge">已作廢</span>
+            }
+          </div>
+          <strong>{{ money(s.amountMinor) }}</strong>
+          @if (!s.voidedAt && (owner() || s.createdBy === api.user()?.id)) {
+            <button mat-button [disabled]="busy()" (click)="voidPayment(s)">作廢</button>
+          }
+        </div>
+      } @empty {
+        <div class="empty">尚無人工還款紀錄。</div>
+      }
+    </div>
+  }
+  @if (tab() === 'members') {
+    <div class="editor-grid">
+      <div>
+        <h2>群組成員</h2>
+        <div class="panel">
+          @for (m of members(); track m.id) {
+            <div class="list-row">
+              <div class="grow">
+                <strong>{{ m.name }}</strong>
+                @if (m.userId === g.ownerId) {
+                  <span class="badge">擁有者</span>
+                }
+                @if (m.hasHistory) {
+                  <p class="small muted">已有歷史帳務，無法移除</p>
+                }
+              </div>
+              @if (owner() && m.userId !== g.ownerId) {
+                <button mat-button [disabled]="m.hasHistory || busy()" (click)="remove(m)">
+                  移除
+                </button>
+              }
+            </div>
+          }
+        </div>
+        @if (owner()) {
+          <h2>邀請朋友</h2>
+          <button mat-flat-button [disabled]="busy()" (click)="invite()">產生 7 天邀請連結</button>
+          @if (inviteLink()) {
+            <div class="invite-box">
+              <label for="invite-link">新邀請連結（僅顯示這一次）</label
+              ><input id="invite-link" readonly [value]="inviteLink()" /><button
+                mat-button
+                (click)="copy()"
+              >
+                複製連結
+              </button>
+            </div>
+          }
+          @for (i of invites(); track i.id) {
+            <div class="list-row">
+              <span class="small"
+                >期限 {{ i.expiresAt | date: 'yyyy/MM/dd HH:mm' }}
+                {{ i.revokedAt ? '（已撤銷）' : '' }}</span
+              >
+              @if (!i.revokedAt) {
+                <button mat-button [disabled]="busy()" (click)="revoke(i.id)">撤銷</button>
+              }
+            </div>
+          }
+        }
+      </div>
+      @if (owner()) {
+        <mat-card
+          ><mat-card-content
+            ><h2>群組設定</h2>
+            <form [formGroup]="settings" (ngSubmit)="saveSettings()">
+              <mat-form-field
+                ><mat-label>群組名稱</mat-label
+                ><input matInput formControlName="name" maxlength="100" /></mat-form-field
+              ><mat-form-field
+                ><mat-label>描述</mat-label
+                ><textarea matInput formControlName="description" maxlength="500"></textarea>
+              </mat-form-field>
+              <p class="muted small">幣別：TWD，建立後不可修改。</p>
+              <button mat-flat-button [disabled]="settings.invalid || busy()">儲存設定</button>
+            </form></mat-card-content
+          ></mat-card
+        >
+      }
+    </div>
+  }
+}
